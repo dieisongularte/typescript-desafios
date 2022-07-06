@@ -16,7 +16,7 @@ let requestToken: string;
 let username: string;
 let password: string;
 let sessionId: string;
-let listId = "7101979";
+let listId: number;
 
 interface IRequestToken {
   success: boolean;
@@ -25,6 +25,7 @@ interface IRequestToken {
 }
 
 type ResultMovie = {
+  id: number;
   original_title: string;
 };
 
@@ -32,14 +33,29 @@ let loginButton = document.getElementById("login-button")! as HTMLButtonElement;
 let searchButton = document.getElementById(
   "search-button"
 )! as HTMLButtonElement;
-let searchContainer = document.getElementById(
-  "search-container"
+let searchContainer = document.getElementById("search-container")!;
+
+let btnCriarLista = document.getElementById(
+  "btn-criar-lista"
 )! as HTMLButtonElement;
 
 loginButton.addEventListener("click", async () => {
   await criarRequestToken();
   await logar();
   await criarSessao();
+});
+
+btnCriarLista.addEventListener("click", async () => {
+  let inputNomeLista = document.getElementById(
+    "nome-lista"
+  )! as HTMLInputElement;
+  let inputDescricaoLista = document.getElementById(
+    "descricao-lista"
+  )! as HTMLTextAreaElement;
+  let nome = inputNomeLista.value;
+  let descricao = inputDescricaoLista.value;
+
+  await criarLista(nome, descricao);
 });
 
 searchButton.addEventListener("click", async () => {
@@ -55,12 +71,17 @@ searchButton.addEventListener("click", async () => {
   ul.id = "lista";
 
   for (const item of listaDeFilmes.results) {
+    let btnAdd = document.createElement("button");
+    btnAdd.innerHTML = "+";
+    btnAdd.onclick = function () {
+      adicionarFilmeNaLista(item.id, listId);
+    };
+
     let li = document.createElement("li");
     li.appendChild(document.createTextNode(item.original_title));
+    li.appendChild(btnAdd);
     ul.appendChild(li);
   }
-
-  console.log(listaDeFilmes);
   searchContainer.appendChild(ul);
 });
 
@@ -135,7 +156,6 @@ class HttpClient {
 
 async function procurarFilme(query: string) {
   query = encodeURI(query);
-  console.log(query);
   let result = await HttpClient.get<{ results: Array<ResultMovie> }>({
     url: `https://api.themoviedb.org/3/search/movie?api_key=${apiKey}&query=${query}`,
     method: "GET",
@@ -148,7 +168,6 @@ async function adicionarFilme(filmeId: string) {
     url: `https://api.themoviedb.org/3/movie/${filmeId}?api_key=${apiKey}&language=en-US`,
     method: "GET",
   });
-  console.log(result);
 }
 
 async function criarRequestToken() {
@@ -157,7 +176,6 @@ async function criarRequestToken() {
     method: "GET",
   });
   requestToken = result.request_token;
-  console.log(requestToken);
 }
 
 async function logar() {
@@ -181,7 +199,10 @@ async function criarSessao() {
 }
 
 async function criarLista(nomeDaLista: string, descricao: string) {
-  let result = await HttpClient.get({
+  let result = await HttpClient.get<{
+    status_message: string;
+    list_id: number;
+  }>({
     url: `https://api.themoviedb.org/3/list?api_key=${apiKey}&session_id=${sessionId}`,
     method: "POST",
     body: {
@@ -190,40 +211,84 @@ async function criarLista(nomeDaLista: string, descricao: string) {
       language: "pt-br",
     },
   });
-  console.log(result);
+  listId = result.list_id;
 }
 
 async function adicionarFilmeNaLista(
   filmeId: number,
   listaId: string | number
 ) {
-  let result = await HttpClient.get({
-    url: `https://api.themoviedb.org/3/list/${listaId}/add_item?api_key=${apiKey}&session_id=${sessionId}`,
-    method: "POST",
-    body: {
-      media_id: filmeId,
-    },
-  });
-  console.log(result);
+  if (listId) {
+    let result = await HttpClient.get({
+      url: `https://api.themoviedb.org/3/list/${listaId}/add_item?api_key=${apiKey}&session_id=${sessionId}`,
+      method: "POST",
+      body: {
+        media_id: filmeId,
+      },
+    });
+    pegarLista();
+  }
 }
 
 async function pegarLista() {
-  let result = await HttpClient.get({
+  let result = await HttpClient.get<{
+    name: string;
+    description: string;
+    items: [{ original_title: string }];
+  }>({
     url: `https://api.themoviedb.org/3/list/${listId}?api_key=${apiKey}`,
     method: "GET",
   });
-  console.log(result);
+
+  let inputNome = document.getElementById("nome")! as HTMLParagraphElement;
+  let inputDescricao = document.getElementById(
+    "descricao"
+  )! as HTMLParagraphElement;
+
+  let listaContainer = document.getElementById("lista-container")!;
+
+  inputNome.innerHTML = "Nome: " + result.name;
+  inputDescricao.innerHTML = "Descrição: " + result.description;
+
+  let listaItemsFilme = document.getElementById("lista-items-filme")!;
+  if (listaItemsFilme) {
+    listaItemsFilme.outerHTML = "";
+  }
+  let ul = document.createElement("ul");
+  ul.id = "lista-items-filme";
+
+  for (let lista of result.items) {
+    let li = document.createElement("li");
+    li.appendChild(document.createTextNode(lista.original_title));
+    ul.appendChild(li);
+  }
+  listaContainer.appendChild(ul);
 }
 
-/* <div style="display: flex;">
-  <div style="display: flex; width: 300px; height: 100px; justify-content: space-between; flex-direction: column;">
-      <input id="login" placeholder="Login" onchange="preencherLogin(event)">
-      <input id="senha" placeholder="Senha" type="password" onchange="preencherSenha(event)">
-      <input id="api-key" placeholder="Api Key" onchange="preencherApi()">
-      <button id="login-button" disabled>Login</button>
-  </div>
-  <div id="search-container" style="margin-left: 20px">
-      <input id="search" placeholder="Escreva...">
-      <button id="search-button">Pesquisar Filme</button>
-  </div>
-</div>*/
+/*<div style="display: flex;">
+        <div style="display: flex; width: 300px; height: 100px; justify-content: space-between; flex-direction: column;">
+            <input id="login" placeholder="Login" onchange="preencherLogin(event)">
+            <input id="senha" placeholder="Senha" type="password" onchange="preencherSenha(event)">
+            <input id="api-key" placeholder="Api Key" onchange="preencherApi()">
+            <button id="login-button" disabled>Login</button>
+        </div>
+        <div id="search-container" style="margin-left: 20px">
+            <input id="search" placeholder="Escreva...">
+            <button id="search-button">Pesquisar Filme</button>
+        </div>
+    </div>
+    <hr />
+    <div style="display: flex;">
+        <div id="lista-container" style="display: flex; width: 300px; height: 100px; justify-content: space-between; flex-direction: column;">
+            <h2>Listas Criadas</h2>
+            <p id="nome"></p>
+            <p id="descricao"></p>
+        </div>
+        <hr style="margin: 0 8%;" />
+        <div style="display: flex; justify-content: space-between; flex-direction: column;">
+            <h2>Criar Lista</h2>
+            <input id="nome-lista" type="text" placeholder="Digite o nome da lista..." />
+            <textarea name="descricao-lista" id="descricao-lista" placeholder="Digite a descricao da lista..." cols="30" rows="5" maxlength="100"></textarea>
+            <button id="btn-criar-lista">Criar Lista</button>
+        </div>
+    </div>*/
